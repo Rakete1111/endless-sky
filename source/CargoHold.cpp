@@ -85,7 +85,60 @@ void CargoHold::Load(const DataNode &node)
 				outfits[outfit] += count;
 			}
 		}
+		else if(child.Token(0) == "missions")
+		{
+			for(const DataNode &grand : child)
+			{
+				std::string missionIdentifier = grand.Token(0);
+				int cargo = 0;
+				int passengers = 0;
+				for(const DataNode &ggrand : grand)
+					if(ggrand.Token(0) == "cargo")
+						cargo = ggrand.Value(1);
+					else if(ggrand.Token(0) == "passengers")
+						passengers = ggrand.Value(1);
+
+				missionsToBeAdded[missionIdentifier]
+					= std::pair<int, int>{cargo, passengers};
+			}
+		}
 	}
+}
+
+
+// Try to finish loading the specific mission into cargo if this ship
+// previously had this mission's cargo and the right amount of
+// cargo/passengers.
+// If a matching mission was found, returns true and added contains the
+// amount.
+// If not matching mission was found, returns false and added is unchanged.
+bool CargoHold::TryFinishLoadingMission(const Mission *mission,
+		std::pair<int, int> &added)
+{
+	for(auto &cargo : missionsToBeAdded)
+	{
+		// Look if this cargo hold holds this mission's cargo.
+		if(cargo.first != mission->Identifier())
+			continue;
+
+		// Only add as much is requested, if possible.
+		int cargoSize = min(added.first, cargo.second.first);
+		int passengerSize = min(added.second, cargo.second.second);
+
+		missionCargo[mission] = cargoSize;
+		if(added.second)
+			passengers[mission] = passengerSize;
+
+		cargo.second.first -= cargoSize;
+		cargo.second.second -= passengerSize;
+		added = {cargoSize, passengerSize};
+
+		if(!cargo.second.first && !cargo.second.second)
+			missionsToBeAdded.erase(cargo.first);
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -136,9 +189,47 @@ void CargoHold::Save(DataWriter &out) const
 			
 			out.Write(it.first->Name(), it.second);
 		}
+	if(!firstOutfit)
+		out.EndChild();
+
+	// Merge the missions that are in this cargo hold.
+	std::map<std::string, std::pair<int, int>> missions;
+	for(const auto &it : missionCargo)
+		missions[it.first->Identifier()].first += it.second;
+	for(const auto &it : passengers)
+		missions[it.first->Identifier()].second += it.second;
+
+	bool firstMissions = true;
+	for(const auto &it : missions)
+	{
+		// Print the opening tag if we haven't already.
+		if(first)
+		{
+			out.Write("cargo");
+			out.BeginChild();
+		}
+		first = false;
+
+		// Print the opening tag for missions if we haven't already.
+		if(firstMissions)
+		{
+			out.Write("missions");
+			out.BeginChild();
+		}
+		firstMissions = false;
+
+		out.Write(it.first);
+		out.BeginChild();
+		if(it.second.first)
+			out.Write("cargo", it.second.first);
+		if(it.second.second)
+			out.Write("passengers", it.second.second);
+		out.EndChild();
+	}
+
 	// Back out any indentation blocks that are set, depending on what sorts of
 	// cargo were written to the file.
-	if(!firstOutfit)
+	if (!firstMissions)
 		out.EndChild();
 	if(!first)
 		out.EndChild();

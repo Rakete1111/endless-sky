@@ -198,10 +198,7 @@ void PlayerInfo::Load(const string &path)
 		
 		// Records of things you have done or are doing, or have happened to you:
 		else if(child.Token(0) == "mission")
-		{
 			missions.emplace_back(child);
-			cargo.AddMissionCargo(&missions.back());
-		}
 		else if(child.Token(0) == "available job")
 			availableJobs.emplace_back(child);
 		else if(child.Token(0) == "available mission")
@@ -2298,6 +2295,34 @@ void PlayerInfo::ApplyChanges()
 		const Planet *planet = GameData::Planets().Find(it->first.substr(prefix.length()));
 		if(planet)
 			GameData::GetPolitics().DominatePlanet(planet);
+	}
+
+	// Finish loading all of the mission cargo into the correct ships.
+	for(const Mission &mission : Missions())
+	{
+		std::pair<int, int> required{mission.CargoSize(), mission.Passengers()};
+
+		bool found = false;
+		for(const shared_ptr<Ship> &ship : ships)
+		{
+			std::pair<int, int> inship = required;
+			if(ship->Cargo().TryFinishLoadingMission(&mission, inship))
+			{
+				required.first -= inship.first;
+				required.second -= inship.second;
+				// Check to see if the mission cargo has been fully loaded.
+				if(!required.first && !required.second)
+				{
+					found = true;
+					break;
+				}
+			}
+		}
+
+		// If we are here, the mission didn't have ships for its cargo. This can happen
+		// on older saves.
+		if(!found)
+			cargo.AddMissionCargo(&mission);
 	}
 	
 	// Make sure all data defined in this saved game is valid.

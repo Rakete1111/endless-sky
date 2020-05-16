@@ -38,6 +38,14 @@ public:
 	// Load the cargo manifest from a DataFile. This must be done after the
 	// GameData is loaded, so that the sizes of any outfits are known.
 	void Load(const DataNode &node);
+	// Try to finish loading the specific mission into cargo if this ship
+	// previously had this mission's cargo and the right amount of
+	// cargo/passengers.
+	// If a matching mission was found, returns true and added contains the
+	// amount.
+	// If not matching mission was found, returns false and added is unchanged.
+	bool TryFinishLoadingMission(const Mission *mission,
+			std::pair<int, int> &added);
 	// Save the cargo manifest to a file.
 	void Save(DataWriter &out) const;
 	
@@ -114,6 +122,9 @@ private:
 	std::map<const Outfit *, int> outfits;
 	std::map<const Mission *, int> missionCargo;
 	std::map<const Mission *, int> passengers;
+
+	// Mission cargo whose missions haven't been loaded yet.
+	std::map<std::string, std::pair<int, int>> missionsToBeAdded;
 };
 
 
